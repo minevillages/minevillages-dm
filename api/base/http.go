@@ -1,7 +1,10 @@
 package baseapi
 
 import (
+	"log"
+	"minevillages/dm/api/db"
 	"minevillages/dm/api/health"
+	"minevillages/dm/api/message"
 	"minevillages/dm/cache"
 	"minevillages/dm/json"
 	"minevillages/dm/util"
@@ -14,8 +17,14 @@ type HTTPHandler struct {
 }
 
 func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 사용자가 요청한 경로가 api로 시작하는 경우 BackHandler로 연결합니다.
-	if util.IsApi(r.URL.Path) {
+
+	firstURI := util.FirstURI(r.URL.Path)
+
+	if firstURI == "ws" {
+		h.WebSocketHandler(w, r)
+		go message.Handler()
+	} else if firstURI == "api" {
+		// 사용자가 요청한 경로가 api로 시작하는 경우 BackHandler로 연결합니다.
 		h.BackHandler(w, r)
 	} else {
 		h.FrontHandler(w, r)
@@ -52,4 +61,29 @@ func (HTTPHandler) FrontHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=31536000, public")
 	}
 	res.WriteWith(w, r)
+}
+func (HTTPHandler) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
+
+	// 웹소켓 업그레이드
+	ws, err := message.Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ws.Close()
+
+	// 클라이언트 등록
+	message.Clients[ws] = true
+
+	for {
+		var msg db.Message
+		// 클라이언트로부터 메시지 읽기
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("error: %v", err)
+			delete(message.Clients, ws)
+			break
+		}
+		// 메시지를 브로드캐스트 채널에 전송
+		message.Broadcast <- msg
+	}
 }

@@ -24,11 +24,7 @@ func ContentAndType(path string) ([]byte, string) {
 	return content, ContentType(path)
 }
 
-func IsApi(path string) bool {
+func FirstURI(path string) string {
 	paths := strings.Split(path, "/")
-	if paths[1] == "api" {
-		return true
-	} else {
-		return false
-	}
+	return paths[1]
 }
