@@ -3,18 +3,17 @@ package db
 import (
 	"context"
 	"log"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// 메시지 구조체
 type Message struct {
-	Message   string    `json:"message"`
-	Sender    string    `json:"sender"`
-	Timestamp time.Time `json:"timestamp"`
-	Read      bool      `json:"read"`
+	Sender   string `json:"sender"`
+	Receiver string `json:"receiver"`
+	Content  string `json:"content"`
 }
 
 type Mongo struct {
@@ -60,4 +59,37 @@ func (m *Message) Insert() error {
 		return err
 	}
 	return nil
+}
+
+func (m *Message) Find() ([]Message, error) {
+	collection := &Collection{
+		Database:   "GameVillages",
+		Collection: "DM",
+	}
+	DMcollection := collection.Get()
+
+	filter := bson.M{"receiver": bson.M{"$exists": true}}
+	cursor, err := DMcollection.Find(context.Background(), filter)
+	if err != nil {
+		log.Fatalln(err)
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var messages []Message
+	for cursor.Next(context.Background()) {
+		var msg Message
+		if err := cursor.Decode(&msg); err != nil {
+			log.Fatalln(err)
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Fatalln(err)
+		return nil, err
+	}
+
+	return messages, nil
 }
